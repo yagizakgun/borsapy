@@ -346,10 +346,11 @@ class TradingViewProvider(BaseProvider):
         end: datetime | None,
     ) -> int:
         """Calculate number of bars to request based on period/interval."""
-        if start and end:
-            days = (end - start).days
-        elif start:
-            days = (datetime.now() - start).days
+        if start:
+            # Always calculate from start to NOW so TradingView returns
+            # enough bars to cover the requested date range.
+            # Client-side filtering will trim to the actual range.
+            days = (datetime.now() - start).days + 1
         elif period == "ytd":
             days = datetime.now().timetuple().tm_yday
         else:
@@ -498,8 +499,8 @@ class TradingViewProvider(BaseProvider):
 
         # Wait for data with timeout
         timeout = 10
-        start = time.time()
-        while not data_received and not error_msg and (time.time() - start) < timeout:
+        t0 = time.time()
+        while not data_received and not error_msg and (time.time() - t0) < timeout:
             time.sleep(0.1)
 
         ws.close()
@@ -520,6 +521,16 @@ class TradingViewProvider(BaseProvider):
 
         # Convert to Istanbul timezone
         df.index = df.index.tz_convert("Europe/Istanbul")
+
+        # Filter by start/end dates if provided
+        if start:
+            start_tz = pd.Timestamp(start, tz="Europe/Istanbul") if start.tzinfo is None else pd.Timestamp(start)
+            df = df[df.index >= start_tz]
+        if end:
+            end_tz = pd.Timestamp(end, tz="Europe/Istanbul") if end.tzinfo is None else pd.Timestamp(end)
+            # Include the full end day
+            end_tz = end_tz.normalize() + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            df = df[df.index <= end_tz]
 
         return df
 

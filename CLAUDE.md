@@ -8,6 +8,63 @@ borsapy is a yfinance-like Python library for Turkish financial markets data.
 
 ## Changelog
 
+### v0.8.4 (2026-03-28)
+
+#### Bug Fixes
+- **`start`/`end` parametresi düzeltildi**: `history(start=..., end=...)` artık doğru tarih aralığını döndürüyor
+  - **Sorun**: TradingView WebSocket API her zaman son N bar'ı döndürüyor, tarih aralığı belirleyemiyordu. `start="2020-01-01", end="2020-12-31"` denildiğinde ~365 bar hesaplanıyordu ama TradingView bugünden geriye son 365 günü döndürüyordu.
+  - **Çözüm 1**: `_calculate_bars()` artık `start`'tan bugüne kadar bar hesaplıyor (eski veriyi de kapsayacak şekilde)
+  - **Çözüm 2**: DataFrame döndükten sonra `start`/`end` tarihlerine göre client-side filtreleme eklendi
+  - **Bonus fix**: `start = time.time()` değişken ismi `t0` olarak değiştirildi (parametre shadowing bug)
+
+  ```python
+  import borsapy as bp
+  stock = bp.Ticker("THYAO")
+
+  # Artık doğru çalışıyor
+  df = stock.history(start="2020-01-01", end="2020-12-31")
+  print(df.index[0])   # 2020-01-02
+  print(df.index[-1])  # 2020-12-31
+  ```
+
+#### New Features
+- **Split-unadjusted (gerçek) fiyatlar**: `history(adjust=False)` ile ham fiyatlar alınabiliyor
+  - TradingView varsayılan olarak split-adjusted fiyat döndürüyor
+  - `adjust=False` ile İş Yatırım splits verisi kullanılarak ters-düzeltme yapılıyor
+  - Split tarihinden önceki fiyatlar kümülatif split oranıyla çarpılıyor
+  - Split sonrası fiyatlar değişmez (bugünkü fiyat = gerçek fiyat)
+
+  ```python
+  import borsapy as bp
+  stock = bp.Ticker("THYAO")
+
+  # Split-adjusted (varsayılan)
+  df_adj = stock.history(period="max")
+  print(df_adj.iloc[0]["Close"])   # ~2.39 TL (adjusted)
+
+  # Gerçek fiyatlar
+  df_raw = stock.history(period="max", adjust=False)
+  print(df_raw.iloc[0]["Close"])   # Gerçek nominal fiyat
+
+  # Son fiyat her iki modda da aynı
+  df_adj.iloc[-1]["Close"] == df_raw.iloc[-1]["Close"]  # True
+  ```
+
+  **`adjust` Parametresi:**
+  | Değer | Açıklama |
+  |-------|----------|
+  | `True` | Split-adjusted fiyatlar (varsayılan, geriye uyumlu) |
+  | `False` | Gerçek nominal fiyatlar (İş Yatırım splits verisi ile ters-düzeltme) |
+
+#### Technical Changes
+- `_providers/tradingview.py`: `_calculate_bars()` — `start` verildiğinde `start→now` arası bar hesaplıyor
+- `_providers/tradingview.py`: DataFrame döndükten sonra `start`/`end` client-side filtresi eklendi
+- `_providers/tradingview.py`: `start = time.time()` → `t0 = time.time()` (parametre shadowing fix)
+- `ticker.py`: `history()` metoduna `adjust: bool = True` parametresi eklendi
+- `ticker.py`: `_unadjust_prices()` metodu eklendi — splits verisinden kümülatif ters-düzeltme faktörü hesaplıyor
+
+---
+
 ### v0.8.3 (2026-03-09)
 
 #### Changes

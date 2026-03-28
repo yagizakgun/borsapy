@@ -127,6 +127,9 @@ df = hisse.history(period="max")    # Tüm geçmiş
 # Tarih aralığı
 df = hisse.history(start="2024-01-01", end="2024-06-30")
 
+# Split-unadjusted (gerçek) fiyatlar
+df = hisse.history(period="max", adjust=False)
+
 # Farklı zaman dilimleri (interval)
 df = hisse.history(period="1g", interval="1m")   # 1 dakikalık mumlar
 df = hisse.history(period="1g", interval="3m")   # 3 dakikalık mumlar

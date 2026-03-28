@@ -626,6 +626,7 @@ class Ticker(TechnicalMixin, TwitterMixin):
         start: datetime | str | None = None,
         end: datetime | str | None = None,
         actions: bool = False,
+        adjust: bool = True,
     ) -> pd.DataFrame:
         """
         Get historical OHLCV data.
@@ -640,6 +641,8 @@ class Ticker(TechnicalMixin, TwitterMixin):
             end: End date (string or datetime). Defaults to today.
             actions: If True, include Dividends and Stock Splits columns.
                      Defaults to False.
+            adjust: If True (default), return split-adjusted prices.
+                    If False, return unadjusted (raw) prices.
 
         Returns:
             DataFrame with columns: Open, High, Low, Close, Volume.
@@ -652,6 +655,7 @@ class Ticker(TechnicalMixin, TwitterMixin):
             >>> stock.history(period="1y", interval="1wk")  # Weekly for 1 year
             >>> stock.history(start="2024-01-01", end="2024-06-30")  # Date range
             >>> stock.history(period="1y", actions=True)  # With dividends/splits
+            >>> stock.history(period="max", adjust=False)  # Raw unadjusted prices
         """
         # Parse dates if strings
         start_dt = self._parse_date(start) if start else None
@@ -664,6 +668,9 @@ class Ticker(TechnicalMixin, TwitterMixin):
             start=start_dt,
             end=end_dt,
         )
+
+        if not adjust and not df.empty:
+            df = self._unadjust_prices(df)
 
         if actions and not df.empty:
             df = self._add_actions_to_history(df)
@@ -722,6 +729,58 @@ class Ticker(TechnicalMixin, TwitterMixin):
                                 break
         except Exception:
             pass
+
+        return df
+
+    def _unadjust_prices(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Reverse split adjustments to return raw unadjusted prices.
+
+        TradingView returns split-adjusted prices by default. This method
+        uses the splits data from İş Yatırım to reverse the adjustments.
+        """
+        try:
+            splits = self.splits
+        except Exception:
+            return df
+
+        if splits.empty:
+            return df
+
+        # Collect split events with bonus ratios
+        split_events = []
+        for split_date, row in splits.iterrows():
+            bonus_pct = row.get("BonusFromCapital", 0) + row.get(
+                "BonusFromDividend", 0
+            )
+            if bonus_pct > 0:
+                ratio = 1 + (bonus_pct / 100)
+                split_events.append(
+                    (pd.Timestamp(split_date, tz="Europe/Istanbul"), ratio)
+                )
+
+        if not split_events:
+            return df
+
+        # Sort by date ascending
+        split_events.sort(key=lambda x: x[0])
+
+        df = df.copy()
+
+        # Build a vectorized adjustment factor series.
+        # For each split, all rows BEFORE the split date get multiplied by the ratio.
+        factor = pd.Series(1.0, index=df.index)
+        for split_date, ratio in split_events:
+            factor = factor * pd.Series(
+                [ratio if idx < split_date else 1.0 for idx in df.index],
+                index=df.index,
+            )
+
+        price_cols = [c for c in ["Open", "High", "Low", "Close"] if c in df.columns]
+        for col in price_cols:
+            df[col] = df[col] * factor
+        if "Volume" in df.columns:
+            df["Volume"] = df["Volume"] / factor
 
         return df
 
