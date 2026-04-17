@@ -1,8 +1,11 @@
 """TEFAS provider for mutual fund data."""
 
+import json
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
+import httpx
 import pandas as pd
 import urllib3
 
@@ -126,6 +129,74 @@ class TEFASProvider(BaseProvider):
         except (ValueError, TypeError):
             return None
 
+    @staticmethod
+    def _safe_json(response: httpx.Response, endpoint: str) -> Any:
+        """Parse TEFAS JSON response with descriptive errors for non-JSON bodies.
+
+        TEFAS occasionally returns an empty body or an HTML maintenance/WAF page
+        with HTTP 200 instead of JSON. The stock ``response.json()`` masks this
+        as a bare ``JSONDecodeError`` — this wrapper surfaces the HTTP status,
+        content type, and a body preview so callers can diagnose the upstream
+        failure.
+        """
+        status = response.status_code
+        content_type = response.headers.get("content-type", "")
+        body = response.content or b""
+
+        if not body.strip():
+            raise APIError(
+                f"TEFAS {endpoint} returned an empty response "
+                f"(HTTP {status}, content-type={content_type!r}). "
+                "Upstream API may be down or rate-limited."
+            )
+
+        if "json" not in content_type.lower():
+            preview = body[:200].decode("utf-8", errors="replace")
+            raise APIError(
+                f"TEFAS {endpoint} returned non-JSON response "
+                f"(HTTP {status}, content-type={content_type!r}). "
+                f"Body preview: {preview!r}"
+            )
+
+        try:
+            return response.json()
+        except json.JSONDecodeError as e:
+            preview = body[:200].decode("utf-8", errors="replace")
+            raise APIError(
+                f"TEFAS {endpoint} returned malformed JSON "
+                f"(HTTP {status}, content-type={content_type!r}): {e.msg}. "
+                f"Body preview: {preview!r}"
+            ) from e
+
+    def _post_json(
+        self,
+        url: str,
+        data: dict[str, Any],
+        endpoint: str,
+        headers: dict[str, str] | None = None,
+        max_retries: int = 3,
+    ) -> Any:
+        """POST to TEFAS and parse JSON, retrying transient WAF blocks.
+
+        TEFAS WAF intermittently returns empty bodies or HTML maintenance
+        pages with HTTP 200. Retries with exponential backoff (0.5s, 1s, 2s)
+        when :meth:`_safe_json` detects such non-JSON responses.
+        """
+        last_error: APIError | None = None
+        for attempt in range(max_retries):
+            if attempt > 0:
+                time.sleep(0.5 * (2 ** (attempt - 1)))
+
+            response = self._client.post(url, data=data, headers=headers)
+            response.raise_for_status()
+            try:
+                return self._safe_json(response, endpoint)
+            except APIError as e:
+                last_error = e
+
+        assert last_error is not None  # loop always runs at least once
+        raise last_error
+
     def get_fund_detail(self, fund_code: str, fund_type: str = "YAT") -> dict[str, Any]:
         """
         Get detailed information about a fund.
@@ -155,9 +226,7 @@ class TEFASProvider(BaseProvider):
                 "Accept": "application/json, text/plain, */*",
             }
 
-            response = self._client.post(url, data=data, headers=headers)
-            response.raise_for_status()
-            result = response.json()
+            result = self._post_json(url, data, "GetAllFundAnalyzeData", headers=headers)
 
             if not result or not result.get("fundInfo"):
                 raise DataNotAvailableError(f"No data for fund: {fund_code}")
@@ -375,15 +444,7 @@ class TEFASProvider(BaseProvider):
                 "X-Requested-With": "XMLHttpRequest",
             }
 
-            response = self._client.post(url, data=data, headers=headers)
-            response.raise_for_status()
-
-            # Check if response is JSON (not HTML error page)
-            content_type = response.headers.get("content-type", "")
-            if "text/html" in content_type:
-                raise APIError("TEFAS WAF blocked the request")
-
-            result = response.json()
+            result = self._post_json(url, data, "BindHistoryInfo", headers=headers)
 
             if not result.get("data"):
                 raise DataNotAvailableError(f"No history for fund: {fund_code}")
@@ -473,9 +534,7 @@ class TEFASProvider(BaseProvider):
                 "X-Requested-With": "XMLHttpRequest",
             }
 
-            response = self._client.post(url, data=data, headers=headers)
-            response.raise_for_status()
-            result = response.json()
+            result = self._post_json(url, data, "BindHistoryAllocation", headers=headers)
 
             if not result.get("data"):
                 raise DataNotAvailableError(f"No allocation data for fund: {fund_code}")
@@ -574,9 +633,7 @@ class TEFASProvider(BaseProvider):
                 "X-Requested-With": "XMLHttpRequest",
             }
 
-            response = self._client.post(url, data=data, headers=headers)
-            response.raise_for_status()
-            result = response.json()
+            result = self._post_json(url, data, "BindComparisonFundReturns", headers=headers)
 
             all_funds = result.get("data", []) if isinstance(result, dict) else result
 
@@ -789,9 +846,7 @@ class TEFASProvider(BaseProvider):
                 "X-Requested-With": "XMLHttpRequest",
             }
 
-            response = self._client.post(url, data=data, headers=headers)
-            response.raise_for_status()
-            result = response.json()
+            result = self._post_json(url, data, "BindComparisonFundReturns", headers=headers)
 
             all_funds = result.get("data", []) if isinstance(result, dict) else result
 
@@ -859,9 +914,7 @@ class TEFASProvider(BaseProvider):
                 "X-Requested-With": "XMLHttpRequest",
             }
 
-            response = self._client.post(url, data=data, headers=headers)
-            response.raise_for_status()
-            result = response.json()
+            result = self._post_json(url, data, "BindComparisonManagementFees", headers=headers)
 
             all_funds = result.get("data", []) if isinstance(result, dict) else result
 

@@ -93,9 +93,14 @@ class TestGetManagementFeesMocked:
     """Unit tests for TEFASProvider.get_management_fees with mocked API."""
 
     def _make_provider(self):
+        import json as _json
+
         mock_response = MagicMock()
         mock_response.json.return_value = MOCK_API_RESPONSE
         mock_response.raise_for_status = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "application/json; charset=utf-8"}
+        mock_response.content = _json.dumps(MOCK_API_RESPONSE).encode("utf-8")
 
         mock_client = MagicMock()
         mock_client.post.return_value = mock_response
