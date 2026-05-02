@@ -333,17 +333,17 @@ class TestGetAllocationParsing:
         assert mock_fetch.call_count == 1
 
 
-class TestPlaywrightLazyImport:
-    def test_missing_playwright_raises_helpful_importerror(self, monkeypatch):
+class TestStealthyFetcherLazyImport:
+    def test_missing_scrapling_raises_helpful_importerror(self, monkeypatch):
         provider = TEFASProvider.__new__(TEFASProvider)
         provider._cache = Cache()
 
-        # Force the playwright import to fail
+        # Force the scrapling import to fail
         import sys
-        monkeypatch.setitem(sys.modules, "playwright.sync_api", None)
+        monkeypatch.setitem(sys.modules, "scrapling.fetchers", None)
 
         with pytest.raises(ImportError) as exc_info:
             provider._fetch_fund_page_html("AAK")
         msg = str(exc_info.value)
-        assert "playwright" in msg.lower()
+        assert "scrapling" in msg.lower()
         assert "borsapy[allocation]" in msg

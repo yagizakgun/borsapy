@@ -611,15 +611,16 @@ print(fon.info['fund_class'])         # "YAT" veya "EMK"
 
 > **Not**: `weekly_return` yeni TEFAS API'sinde mevcut değil — `None` döner.
 
-### Varlık Dağılımı (Playwright Gerekli)
+### Varlık Dağılımı (Scrapling Gerekli)
 
-TEFAS Nisan 2026'da SSR mimarisine geçti ve allocation verisi artık WAF
-korumalı HTML sayfasında embed olarak geliyor. Bu yüzden `Fund.allocation`
-artık Playwright ile gerçek tarayıcıda render gerektiriyor:
+TEFAS Nisan 2026'da SSR mimarisine geçti ve allocation verisi artık Akamai
+korumalı HTML sayfasında embed olarak geliyor. Plain headless Chromium bot
+tespitine takıldığı için `Fund.allocation` artık Scrapling'in Camoufox tabanlı
+StealthyFetcher'ını kullanıyor:
 
 ```bash
 pip install borsapy[allocation]
-playwright install chromium
+camoufox fetch                      # tek seferlik tarayıcı binary indirme (~80 MB)
 ```
 
 ```python

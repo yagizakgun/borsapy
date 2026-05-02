@@ -608,11 +608,13 @@ class TEFASProvider(BaseProvider):
         the ``/tr/fon-detayli-analiz/<code>`` HTML page, which is protected
         by an Akamai TSPD JS challenge that pure-HTTP clients cannot solve.
 
-        This method launches a headless Chromium via Playwright to render
-        the page, then extracts the inline ``varlikData`` JSON. Install with::
+        This method uses Scrapling's :class:`StealthyFetcher` (Camoufox-based)
+        to render the page through a stealth Firefox build that bypasses
+        Akamai's bot detection, then extracts the inline ``varlikData``
+        JSON. Install with::
 
             pip install borsapy[allocation]
-            playwright install chromium
+            camoufox fetch  # one-time browser binary download
 
         Only a snapshot for the current day is returned. The legacy date-range
         parameters (``start``, ``end``) are accepted for backward compatibility
@@ -690,43 +692,48 @@ class TEFASProvider(BaseProvider):
         return df
 
     def _fetch_fund_page_html(self, fund_code: str) -> str:
-        """Render the WAF-protected TEFAS fund page via headless Playwright.
+        """Render the WAF-protected TEFAS fund page via Scrapling.
+
+        Plain headless Chromium gets blocked by Akamai's bot detection
+        (TSPD JS challenge), so we use Scrapling's :class:`StealthyFetcher`
+        which is built on Camoufox (a stealth Firefox fork) and routinely
+        bypasses these protections.
 
         Separated from :meth:`get_allocation` so tests can stub it.
         """
         try:
-            from playwright.sync_api import sync_playwright
+            from scrapling.fetchers import StealthyFetcher
         except ImportError as e:
             raise ImportError(
-                "Fund.allocation requires Playwright since TEFAS migrated "
-                "(2026-04) to a WAF-protected SSR architecture. Install with: "
+                "Fund.allocation requires Scrapling since TEFAS migrated "
+                "(2026-04) to an Akamai-protected SSR site. Install with: "
                 "    pip install borsapy[allocation] && "
-                "playwright install chromium"
+                "camoufox fetch"
             ) from e
 
         url = f"https://www.tefas.gov.tr/tr/fon-detayli-analiz/{fund_code}"
 
         try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                try:
-                    context = browser.new_context(
-                        user_agent=self.DEFAULT_HEADERS["User-Agent"],
-                        locale="tr-TR",
-                    )
-                    page = context.new_page()
-                    page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                    # The SSR JSON is in the initial HTML — no need to wait for
-                    # XHRs. domcontentloaded is enough once the WAF challenge
-                    # passes (Playwright executes its JS automatically).
-                    html = page.content()
-                finally:
-                    browser.close()
+            page = StealthyFetcher.fetch(
+                url,
+                headless=True,
+                network_idle=True,
+                # Akamai TSPD challenges complete within ~5 s on a warm cache.
+                timeout=45_000,
+            )
         except Exception as e:
             raise APIError(
                 f"Failed to render TEFAS allocation page for {fund_code}: {e}"
             ) from e
 
+        if getattr(page, "status", 200) >= 400:
+            raise APIError(
+                f"TEFAS allocation page returned HTTP {page.status} "
+                f"for {fund_code}"
+            )
+
+        # Scrapling's response object has .body (bytes) and .html_content (str)
+        html = getattr(page, "html_content", None) or str(page)
         return html
 
     def screen_funds(

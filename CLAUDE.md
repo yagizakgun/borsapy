@@ -24,10 +24,10 @@ Tüm `/api/DB/*` legacy endpointleri 404 dönüyor; provider tamamen yeni
   - Restore: `isin`, `kap_link`, `first_trading_time`, `last_trading_time`, `buy_valor`, `sell_valor`, `entry_fee`, `exit_fee`, `min_purchase`, `min_redemption`, `max_purchase`, `max_redemption`, `tefas_status`
   - Yeni alan: `fund_class` ("YAT"/"EMK") — `_lookup_fund_returns` üzerinden iki listeye düşerek otomatik tespit
   - Hâlâ yok: `weekly_return` (None döner — yeni API döndürmüyor)
-- **`Fund.allocation`**: Playwright tabanlı SSR scraper'a geçti
+- **`Fund.allocation`**: Scrapling tabanlı StealthyFetcher ile SSR scraper'a geçti
   - TEFAS yeni Next.js sitesi allocation'ı SSR HTML içine embed ediyor (`varlikData`)
-  - Akamai TSPD JS challenge nedeniyle plain HTTP scrape edemiyor → headless Chromium gerekli
-  - `pip install borsapy[allocation]` + `playwright install chromium`
+  - Akamai TSPD JS challenge plain headless Chromium'u da yakalıyor → Scrapling'in Camoufox tabanlı StealthyFetcher'ı kullanılıyor (stealth Firefox build)
+  - `pip install borsapy[allocation]` + `camoufox fetch` (one-time browser binary)
   - Sadece güncel snapshot dönüyor (tek tarih), sıralı asset listesi
 - **`Fund.allocation_history()`**: Deprecated. TEFAS tarihsel allocation'ı artık hiçbir endpointte sunmuyor. `DeprecationWarning` ile `Fund.allocation`'ı döndürüyor
 - **`Fund.get_holdings(api_key=...)`**: `kap_link` artık restore olduğu için tekrar çalışıyor (PR #16'dan sonra `kap_link=None` olduğu için sessizce kırılmıştı)
@@ -39,7 +39,7 @@ Tüm `/api/DB/*` legacy endpointleri 404 dönüyor; provider tamamen yeni
 - `MAX_CHUNK_DAYS` constant
 
 #### Optional Dependency
-- `[allocation]` extra eklendi: `pip install borsapy[allocation]` → playwright>=1.40.0
+- `[allocation]` extra eklendi: `pip install borsapy[allocation]` → `scrapling[fetchers]>=0.4.0` (patchright + camoufox dahil)
 
 #### Technical Changes
 - `_providers/tefas.py`: `_PERIOD_TO_PERIYOD` dict, `_PERIYOD_MAX`, `_resolve_periyod()`, `_lookup_fund_returns()`, `_build_allocation_pattern()`, `_fetch_fund_page_html()` (Playwright wrapper)

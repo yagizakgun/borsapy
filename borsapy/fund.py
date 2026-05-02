@@ -269,11 +269,11 @@ class Fund(TechnicalMixin, TwitterMixin):
         """Get the current portfolio allocation (asset breakdown).
 
         After the 2026-04 TEFAS migration, allocation data is only available
-        through the WAF-protected SSR HTML page. This property requires
-        Playwright::
+        through the Akamai-protected SSR HTML page. This property requires
+        Scrapling (Camoufox-based stealth browser)::
 
             pip install borsapy[allocation]
-            playwright install chromium
+            camoufox fetch  # one-time browser binary download
 
         Only the current snapshot is returned (one row per asset class).
         Historical allocation is no longer available via TEFAS.

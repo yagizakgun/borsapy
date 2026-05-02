@@ -59,10 +59,11 @@ twitter = [
     "Scweet>=4.0.0",
 ]
 allocation = [
-    # TEFAS migrated to a WAF-protected SSR architecture in 2026-04;
-    # Fund.allocation now requires Playwright to render the page.
-    # After install, run: playwright install chromium
-    "playwright>=1.40.0",
+    # TEFAS migrated to an Akamai-protected SSR site in 2026-04. Plain
+    # headless Chromium is detected, so we use Scrapling's StealthyFetcher
+    # (built on Camoufox — a stealth Firefox fork) to render the page.
+    # After install, run: camoufox fetch
+    "scrapling[fetchers]>=0.4.0",
 ]
 
 [project.scripts]
