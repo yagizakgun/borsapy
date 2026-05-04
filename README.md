@@ -2033,28 +2033,49 @@ gezinme, fuzzy arama, TCMB önceden tanımlı dashboard'lar.
 > HTML). PyPI'daki eski `evds`/`evdsAPI` paketleri kırıldı. borsapy yeni v3
 > backend'i (`/igmevdsms-dis/...`) wrap eder.
 
-### API Anahtarı (Ücretsiz)
+### API Anahtarı Nasıl Alınır (Ücretsiz)
 
-EVDS verisi çekmek için ücretsiz API anahtarı gerekir:
+EVDS zaman serisi verisi çekmek için TCMB'den ücretsiz API anahtarı almanız
+gerekiyor (bir kerelik 5 dakikalık iş):
 
-1. https://evds3.tcmb.gov.tr → "BENİM SAYFAM" → Kayıt Ol
-2. Profilim → API Key Kopyala
-3. Ya `bp.set_evds_key("YOUR_KEY")` ile programatik ya da `EVDS_API_KEY` env var ile yapılandır
+1. **Kayıt ol**: https://evds3.tcmb.gov.tr adresine git, sağ üstteki
+   **"BENİM SAYFAM"** bağlantısına tıkla. Henüz hesabın yoksa **"Kayıt Ol"**
+   formundan ücretsiz hesap oluştur (e-posta + parola). Aktivasyon e-postası
+   ile hesabını onayla.
+2. **Giriş yap**: Aynı "BENİM SAYFAM" bağlantısından kullanıcı adı + parola
+   ile giriş yap.
+3. **Profilim sayfasına git**: Sağ üstte artık adın yazıyor. Adının üzerine
+   tıkla — açılan menüden **"Profilim"** seçeneğine bas.
+4. **Anahtarı kopyala**: Profil sayfasının en alt bölümüne in. Şu butonları
+   göreceksin: "Parola Değiştir", "GÜNCELLE", **"API KEY KOPYALA"**,
+   "HESABIMI DONDUR", "ÜYELİKTEN ÇIK". Önce CAPTCHA'daki güvenlik kodunu
+   yaz, sonra **"API KEY KOPYALA"** butonuna bas. Anahtarın panoya
+   kopyalanır (örn: `Ab1Cd2Ef3Gh4`).
+5. **borsapy'ye tanıt**:
 
 ```python
 import borsapy as bp
 
-# Programatik
-bp.set_evds_key("YOUR_API_KEY")
-bp.get_evds_key()             # mevcut anahtar
-bp.clear_evds_key()           # temizle
+# Yöntem 1: Kod içinde
+bp.set_evds_key("PANODAN_YAPISTIR")
 
-# veya export EVDS_API_KEY="..." env var
+# Yöntem 2: Ortam değişkeni (önerilen — kodda anahtar görünmesin)
+# export EVDS_API_KEY="PANODAN_YAPISTIR"   (terminalde)
+# borsapy otomatik okur, set_evds_key çağırmaya gerek yok
+
+# Yardımcı fonksiyonlar
+bp.get_evds_key()             # mevcut anahtar (ya da None)
+bp.clear_evds_key()           # bellekten temizle
 ```
 
-> Anahtar olmadan **katalog navigasyonu, search, dashboards, EVDSSeries.range**
-> çalışmaya devam eder (anonim endpoint'ler). Sadece **zaman serisi verisi**
-> çekmek için anahtar gerekir.
+> **Anahtar gerektirmeyen kısımlar**: katalog gezme (`EVDS().categories`,
+> `datagroups`, `series_in_group`), arama (`search`), dashboard'lar,
+> `EVDSSeries.range`, duyurular — bunlar anahtar olmadan çalışır. Sadece
+> **zaman serisi verisi çekme** (`evds_series`, `evds_download`,
+> `EVDSSeries.history`) için anahtar şart.
+
+> **Güvenlik notu**: Anahtarınızı git'e commit etmeyin. `EVDS_API_KEY`
+> ortam değişkeni veya `.env` dosyası kullanmak en güvenli yol.
 
 ### Hızlı Başlangıç
 
