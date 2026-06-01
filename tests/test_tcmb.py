@@ -115,3 +115,24 @@ class TestPolicyRateFunction:
         func_rate = policy_rate()
         class_rate = TCMB().policy_rate
         assert func_rate == class_rate
+
+
+# =============================================================================
+# Regression Tests
+# =============================================================================
+
+
+def test_latest_row_selected(monkeypatch):
+    from datetime import datetime
+    from borsapy._providers import tcmb_rates
+    fake = [
+        {"date": datetime(2010, 5, 20), "borrowing": 57.0, "lending": 62.0},
+        {"date": datetime(2026, 1, 23), "borrowing": 35.5, "lending": 40.0},
+    ]
+    p = tcmb_rates.get_tcmb_rates_provider()
+    monkeypatch.setattr(p, "_fetch_and_parse_table", lambda url: fake)
+    assert p.get_policy_rate()["lending"] == 40.0
+    on = p.get_overnight_rates()
+    assert on["borrowing"] == 35.5 and on["lending"] == 40.0
+    ll = p.get_late_liquidity_rates()
+    assert ll["borrowing"] == 35.5 and ll["lending"] == 40.0

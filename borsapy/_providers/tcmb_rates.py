@@ -118,8 +118,8 @@ class TCMBRatesProvider(BaseProvider):
         if not data:
             return {"date": None, "lending": None}
 
-        # Most recent rate is first row
-        latest = data[0]
+        # En güncel oran son satırdır (tablo en eskiden en yeniye sıralı)
+        latest = max(data, key=lambda r: r["date"])
         return {
             "date": latest["date"],
             "lending": latest["lending"],
@@ -138,7 +138,7 @@ class TCMBRatesProvider(BaseProvider):
         if not data:
             return {"date": None, "borrowing": None, "lending": None}
 
-        latest = data[0]
+        latest = max(data, key=lambda r: r["date"])
         return {
             "date": latest["date"],
             "borrowing": latest["borrowing"],
@@ -158,7 +158,7 @@ class TCMBRatesProvider(BaseProvider):
         if not data:
             return {"date": None, "borrowing": None, "lending": None}
 
-        latest = data[0]
+        latest = max(data, key=lambda r: r["date"])
         return {
             "date": latest["date"],
             "borrowing": latest["borrowing"],
@@ -204,7 +204,7 @@ class TCMBRatesProvider(BaseProvider):
 
         Returns:
             List of dicts with date, borrowing, lending values.
-            Sorted by date descending (most recent first).
+            Sorted by date ascending (oldest first).
         """
         if rate_type not in TCMB_URLS:
             raise ValueError(f"Invalid rate_type: {rate_type}. Must be one of {list(TCMB_URLS.keys())}")
