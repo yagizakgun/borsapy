@@ -682,6 +682,7 @@ class Ticker(TechnicalMixin, TwitterMixin):
         actions: bool = False,
         adjust: bool = True,
         auto_adjust: bool = False,
+        timeout: float | None = None,
     ) -> pd.DataFrame:
         """
         Get historical OHLCV data.
@@ -701,6 +702,9 @@ class Ticker(TechnicalMixin, TwitterMixin):
             auto_adjust: If True, include an ``Adj Close`` column
                          (split + dividend adjusted, yfinance-style).
                          Defaults to False.
+            timeout: Seconds to wait for data before failing. When None
+                     (default) borsapy's own default/env applies. Lower it to
+                     fail fast and retry on TradingView's unstable first call.
 
         Returns:
             DataFrame with columns: Open, High, Low, Close, Volume.
@@ -727,6 +731,7 @@ class Ticker(TechnicalMixin, TwitterMixin):
             interval=interval,
             start=start_dt,
             end=end_dt,
+            timeout=timeout,
         )
 
         if not adjust and not df.empty:

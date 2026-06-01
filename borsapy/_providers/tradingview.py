@@ -1,6 +1,7 @@
 """TradingView WebSocket provider for real-time and historical data."""
 
 import json
+import os
 import platform
 import random
 import re
@@ -376,6 +377,7 @@ class TradingViewProvider(BaseProvider):
         start: datetime | None = None,
         end: datetime | None = None,
         exchange: str = "BIST",
+        timeout: float | None = None,
     ) -> pd.DataFrame:
         """
         Get historical OHLCV data from TradingView.
@@ -387,6 +389,10 @@ class TradingViewProvider(BaseProvider):
             start: Start date (overrides period if provided)
             end: End date (defaults to now)
             exchange: Exchange name (default: "BIST" for Turkish stocks)
+            timeout: Seconds to wait for data before raising "No data received".
+                     Precedence: this arg > BORSAPY_TV_TIMEOUT env var > 10.0.
+                     A failed attempt waits this long, so a lower value lets a
+                     caller fail fast and retry instead of burning the full 10s.
 
         Returns:
             DataFrame with OHLCV data (columns: Open, High, Low, Close, Volume)
@@ -497,8 +503,13 @@ class TradingViewProvider(BaseProvider):
         ws_thread.daemon = True
         ws_thread.start()
 
-        # Wait for data with timeout
-        timeout = 10
+        # Wait for data with timeout. Precedence: arg > env > 10.0 default.
+        if timeout is None:
+            env_timeout = os.environ.get("BORSAPY_TV_TIMEOUT")
+            try:
+                timeout = float(env_timeout) if env_timeout else 10.0
+            except ValueError:
+                timeout = 10.0
         t0 = time.time()
         while not data_received and not error_msg and (time.time() - t0) < timeout:
             time.sleep(0.1)
