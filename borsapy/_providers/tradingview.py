@@ -6,6 +6,7 @@ import platform
 import random
 import re
 import string
+import threading
 import time
 from datetime import datetime
 
@@ -17,6 +18,26 @@ from borsapy.exceptions import APIError, AuthenticationError
 
 # Module-level auth storage
 _auth_credentials: dict | None = None
+
+
+class _HistoryFlight:
+    """Tek-uçuş (single-flight) için paylaşılan sonuç taşıyıcısı."""
+
+    __slots__ = ("event", "df", "exc")
+
+    def __init__(self) -> None:
+        self.event = threading.Event()
+        self.df = None
+        self.exc: Exception | None = None
+
+
+# Aynı (borsa, sembol, periyot, aralık, start, end) için eşzamanlı history çağrılarını
+# TEK bir TradingView WebSocket çekimine indirger. fast_info/info gibi sarmalayıcılar
+# içeride aynı history(1y)'i tekrar çektiğinden, eşzamanlı build_bundle çağrılarıyla
+# birleşince çok sayıda soğuk bağlantı açılıp "429 Too Many Requests" tetikleniyordu;
+# tek-uçuş bunu önler. Kalıcı önbellek DEĞİL — yalnızca uçuştaki istekleri paylaşır.
+_history_flights_lock = threading.Lock()
+_history_flights: dict[tuple, _HistoryFlight] = {}
 
 
 def set_tradingview_auth(
@@ -382,6 +403,12 @@ class TradingViewProvider(BaseProvider):
         """
         Get historical OHLCV data from TradingView.
 
+        Eşzamanlı aynı istekler tek-uçuş ile birleştirilir (bkz. _history_flights):
+        ilk çağrı çeker, aynı anda gelen aynı parametreli çağrılar onun sonucunu
+        bekleyip paylaşır. Bu, fast_info/info'nun içeride tekrar çektiği history(1y)
+        ile build_bundle'ın eşzamanlı çağrılarının mükerrer soğuk bağlantı açıp
+        429'a düşmesini engeller.
+
         Args:
             symbol: Stock symbol (e.g., "THYAO")
             period: Data period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
@@ -397,6 +424,55 @@ class TradingViewProvider(BaseProvider):
         Returns:
             DataFrame with OHLCV data (columns: Open, High, Low, Close, Volume)
         """
+        norm_symbol = symbol.upper().replace(".IS", "").replace(".E", "")
+        key = (exchange, norm_symbol, period, interval, start, end)
+
+        with _history_flights_lock:
+            flight = _history_flights.get(key)
+            leader = flight is None
+            if leader:
+                flight = _HistoryFlight()
+                _history_flights[key] = flight
+
+        if not leader:
+            # Takipçi: liderin çekimini bekle ve sonucunu paylaş.
+            wait_for = (timeout if timeout is not None else 10.0) + 5.0
+            if flight.event.wait(timeout=wait_for):
+                if flight.exc is not None:
+                    raise flight.exc
+                if flight.df is not None:
+                    return flight.df.copy()
+            # Lider zamanında bitmedi → birleştirmeden kendimiz çekeriz.
+            return self._get_history_uncached(
+                symbol, period, interval, start, end, exchange, timeout
+            )
+
+        # Lider: gerçek çekimi yapar, sonucu/HATAyı takipçilerle paylaşır.
+        try:
+            df = self._get_history_uncached(
+                symbol, period, interval, start, end, exchange, timeout
+            )
+            flight.df = df
+            return df
+        except Exception as exc:
+            flight.exc = exc
+            raise
+        finally:
+            flight.event.set()
+            with _history_flights_lock:
+                _history_flights.pop(key, None)
+
+    def _get_history_uncached(
+        self,
+        symbol: str,
+        period: str = "1mo",
+        interval: str = "1d",
+        start: datetime | None = None,
+        end: datetime | None = None,
+        exchange: str = "BIST",
+        timeout: float | None = None,
+    ) -> pd.DataFrame:
+        """Tek bir TradingView WebSocket history çekimi (tek-uçuş sarmalayıcısı çağırır)."""
         import websocket
 
         # Normalize symbol

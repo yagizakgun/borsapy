@@ -673,6 +673,17 @@ class Ticker(TechnicalMixin, TwitterMixin):
             self._enriched_info = EnrichedInfo(self)
         return self._enriched_info
 
+    @property
+    def company_metrics(self) -> dict:
+        """Şirket metrikleri (İş Yatırım): market_cap, pe_ratio, pb_ratio,
+        ev_ebitda, free_float, foreign_ratio, net_debt.
+
+        ``fast_info``/``info``'nun aksine yalnızca İş Yatırım'a HTTP atar;
+        TradingView ``history``/``quote`` tetiklemez. Yalnız bu metrikler
+        gerektiğinde, soğuk WebSocket maliyetinden kaçınmak için kullanın.
+        """
+        return self._get_isyatirim().get_company_metrics(self._symbol)
+
     def history(
         self,
         period: str = "1mo",
